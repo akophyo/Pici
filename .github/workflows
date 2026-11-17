@@ -1,0 +1,79 @@
+name: Home Queen APK Builder
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract ZIP
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*.zip" | head -n 1)
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No ZIP file found"
+            exit 1
+          fi
+          mkdir project
+          unzip -o "$ZIP_FILE" -d project
+
+      - name: Find Project
+        run: |
+          PACKAGE_FILE=$(find project -name package.json | head -n 1)
+          if [ -z "$PACKAGE_FILE" ]; then
+            echo "package.json not found"
+            exit 1
+          fi
+          echo "APP_DIR=$(dirname "$PACKAGE_FILE")" >> $GITHUB_ENV
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Dependencies
+        run: npm install
+        working-directory: ${{ env.APP_DIR }}
+
+      - name: Build Web App
+        run: npm run build
+        working-directory: ${{ env.APP_DIR }}
+
+      - name: Add Android
+        run: npx cap add android
+        working-directory: ${{ env.APP_DIR }}
+
+      - name: Sync Android
+        run: npx cap sync android
+        working-directory: ${{ env.APP_DIR }}
+
+      - name: Build APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+        working-directory: ${{ env.APP_DIR }}/android
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Home-Queen-APK
+          path: ${{ env.APP_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
+          
